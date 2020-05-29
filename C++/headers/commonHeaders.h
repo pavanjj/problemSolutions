@@ -20,7 +20,8 @@ void print(string A, string B = "")
     else
         cout << A << endl;
 }
-void print(string A, vector<int> &B)
+template <typename T>
+void print(string A, vector<T> &B)
 {
     cout << A << endl;
     for (int i = 0; i < B.size(); i++)
@@ -29,7 +30,8 @@ void print(string A, vector<int> &B)
     }
     cout << endl;
 }
-void print(string A, vector<vector<int>> &B)
+template <typename T>
+void print(string A, vector<vector<T>> &B)
 {
     cout << A << endl;
     for (int i = 0; i < B.size(); i++)
