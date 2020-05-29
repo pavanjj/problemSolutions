@@ -1,4 +1,3 @@
-const lodash = require('lodash');
 const EventEmitter = require('events');
 class PavanPromise {
     constructor(promiseFn) {
@@ -10,36 +9,35 @@ class PavanPromise {
         this.currentStatus = this.statuses.PENDING;
         this.responseObj = {};
         this.settledEventEmitter = new EventEmitter();
-        let handleResolveFunc = lodash.partialRight(this.defaultOnResolveFn, this);
-        let handleRejectFunc = lodash.partialRight(this.defaultOnRejectFn, this);
-        setImmediate(promiseFn, handleResolveFunc, handleRejectFunc);
+
+        const defaultOnResolveFn = (response) => {
+            this.responseObj = response;
+            this.currentStatus = this.statuses.RESOLVED;
+            this.settledEventEmitter.emit('settled');
+        }
+        const defaultOnRejectFn = (response) => {
+            this.responseObj = response;
+            this.currentStatus = this.statuses.REJECTED;
+            this.settledEventEmitter.emit('settled');
+        }
+        setImmediate(promiseFn, defaultOnResolveFn, defaultOnRejectFn);
     }
-    defaultOnResolveFn(responseObj, obj) {
-        obj.responseObj = responseObj;
-        obj.currentStatus = obj.statuses.RESOLVED;
-        obj.settledEventEmitter.emit('settled');
-    }
-    defaultOnRejectFn(responseObj, obj) {
-        obj.responseObj = responseObj;
-        obj.currentStatus = obj.statuses.REJECTED;
-        obj.settledEventEmitter.emit('settled');
-    }
-    processSettledPromise(onResolveFn, onRejectFn, obj) {
+    processSettledPromise(onResolveFn, onRejectFn) {
         const retObj = {};
         try {
             let retVal;
-            if (obj.currentStatus === obj.statuses.RESOLVED) {
-                retVal = onResolveFn(obj.responseObj);
+            if (this.currentStatus === this.statuses.RESOLVED) {
+                retVal = onResolveFn(this.responseObj);
                 retObj.retVal = retVal;
                 retObj.resolved = true;
             }
-            else if (obj.currentStatus === obj.statuses.REJECTED) {
+            else if (this.currentStatus === this.statuses.REJECTED) {
                 if (onRejectFn) {
-                    retVal = onRejectFn(obj.responseObj);
+                    retVal = onRejectFn(this.responseObj);
                     retObj.retVal = retVal;
                     retObj.resolved = true;
                 } else {
-                    retObj.retVal = obj.responseObj;
+                    retObj.retVal = this.responseObj;
                     retObj.resolved = false;
                 }
             }
@@ -49,16 +47,16 @@ class PavanPromise {
         }
         return retObj;
     }
-    processRejectedPromise(onRejectFn, obj) {
+    processRejectedPromise(onRejectFn) {
         const retObj = {};
         try {
             let retVal;
-            if (obj.currentStatus === obj.statuses.RESOLVED) {
-                retObj.retVal = obj.responseObj;
+            if (this.currentStatus === this.statuses.RESOLVED) {
+                retObj.retVal = this.responseObj;
                 retObj.resolved = false;
             }
-            else if (obj.currentStatus === obj.statuses.REJECTED) {
-                retVal = onRejectFn(obj.responseObj);
+            else if (this.currentStatus === this.statuses.REJECTED) {
+                retVal = onRejectFn(this.responseObj);
                 retObj.retVal = retVal;
                 retObj.resolved = true;
             }
@@ -72,24 +70,18 @@ class PavanPromise {
         const thenPromise = new PavanPromise((resolve, reject) => {
             if (!onResolveFn)
                 reject('Resolution call back absent');
-            if (this.currentStatus === this.statuses.PENDING) {
-                const loadedFn = lodash.partial(this.processSettledPromise, onResolveFn, onRejectFn, this);
-                const promiseSettledHandler = () => {
-                    const retObj = loadedFn();
-                    if (retObj.resolved) {
-                        resolve(retObj.retVal);
-                    } else {
-                        reject(retObj.retVal);
-                    }
-                }
-                this.settledEventEmitter.on('settled', promiseSettledHandler);
-            } else {
-                const retObj = this.processSettledPromise(onResolveFn, onRejectFn, this)
+            const promiseSettledHandler = () => {
+                const retObj = this.processSettledPromise(onResolveFn, onRejectFn);
                 if (retObj.resolved) {
                     resolve(retObj.retVal);
                 } else {
                     reject(retObj.retVal);
                 }
+            }
+            if (this.currentStatus === this.statuses.PENDING) {
+                this.settledEventEmitter.on('settled', promiseSettledHandler);
+            } else {
+                promiseSettledHandler();
             }
         });
         return thenPromise;
@@ -98,24 +90,18 @@ class PavanPromise {
         const catchPromise = new PavanPromise((resolve, reject) => {
             if (!onRejectFn)
                 reject('Rejection call back absent');
-            if (this.currentStatus === this.statuses.PENDING) {
-                const handleRejectedPromise = lodash.partial(this.processRejectedPromise, onRejectFn, this);
-                const promiseSettledHandler = () => {
-                    const retObj = handleRejectedPromise();
-                    if (retObj.resolved) {
-                        resolve(retObj.retVal)
-                    } else {
-                        reject(retObj.retVal);
-                    }
-                };
-                this.settledEventEmitter.on('settled', promiseSettledHandler);
-            } else {
-                const retObj = this.processRejectedPromise(onRejectFn, this);
+            const promiseSettledHandler = () => {
+                const retObj = this.processRejectedPromise(onRejectFn);
                 if (retObj.resolved) {
-                    resolve(retObj.retVal);
+                    resolve(retObj.retVal)
                 } else {
                     reject(retObj.retVal);
                 }
+            };
+            if (this.currentStatus === this.statuses.PENDING) {
+                this.settledEventEmitter.on('settled', promiseSettledHandler);
+            } else {
+                promiseSettledHandler();
             }
         });
         return catchPromise;
@@ -131,13 +117,14 @@ function testCode() {
 
     let dummy = new PavanPromise((resolve, reject) => {
         promise('Executes Inside the Promise');
-        setTimeout(resolve, 5000, 'promise settled');
+        setTimeout(resolve, 000, 'promise settled');
     });
 
     dummy
         .then(response => {
             const str = 'Promise Resolved 1: ';
             console.log('Promise Resolved 1: ', response);
+            a.b;
             return "From" + str;
         }, response => {
             const str = 'Promise Rejected 1: ';
@@ -147,7 +134,6 @@ function testCode() {
         .then(response => {
             const str = 'Promise Resolved 2: ';
             console.log('Promise Resolved 2: ', response);
-            a.b;
             return "From" + str;
         }, response => {
             const str = 'Promise Rejected 2: ';
@@ -163,8 +149,6 @@ function testCode() {
             return "From Rejected Promise 3";
         })
     console.log('-----------------------------------------------');
-
-
 }
 testCode();
 
